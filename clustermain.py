@@ -5,6 +5,7 @@
 from loguru import logger
 
 import torch
+from memory_profiler import profile
 from sentence_transformers import SentenceTransformer
 
 from transformers import BertTokenizer, BertModel, BertConfig
@@ -88,6 +89,7 @@ df = pd.concat([df1, df2, df3, df4, df5, df6])
 # device = torch.device("mps")
 
 # Uncomment for amd on windoes
+device = None
 try:
     import torch_directml
     device = torch_directml.device()
@@ -96,8 +98,11 @@ except Exception as e:
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
-else:
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+elif device is None:
     device = torch.device("cpu")
+
 logger.info(f"Using device: {device}")
 
 
@@ -182,6 +187,7 @@ pipeline = pipeline(
 )
 
 
+
 def check_tensor_count():
     import gc
     count = 0
@@ -196,21 +202,24 @@ def check_tensor_count():
     print("Tensor count:", count)
 
 input_ids = None
+@profile
 def get_cls_sentence(sentence):
     global input_ids
     # Tokenize input sentence and convert to tensor
     input_ids = torch.tensor([tokenizer.encode(sentence, add_special_tokens=True, max_length=512)])
 
-    if device == torch_directml.device():
+    if device.type != 'cpu':
         input_ids = input_ids.to(device=device)
-
-
 
 
 
     # Pass input through BERT model and extract embeddings for [CLS] token
     with torch.no_grad():
-        return pipeline.model(input_ids)[0][:, 0, :].flatten()
+        result = pipeline.model(input_ids)[0][:, 0, :].flatten()
+        result.cpu()  # Move result to CPU if using DML
+
+    input_ids.cpu()  # Move input_ids to CPU if using DML
+    return result
 
 
 
@@ -220,7 +229,7 @@ def get_cls_sentence(sentence):
 check_tensor_count()
 st = time.time()
 tqdm.pandas()
-df['cls_bert'] = df['text_cleaned'].progress_apply(lambda sentence: get_cls_sentence(sentence))
+df['cls_bert'] = df['text_cleaned'].apply(lambda sentence: get_cls_sentence(sentence))
 
 et = time.time()
 
@@ -308,7 +317,7 @@ for embedding_and_method in [(X, 'tfidf'), (X_transformers, 'transformers')]:
     plot_pca(f'x0_{method}', f'x1_{method}', cluster_name=clusters_result_name, method=method)
 
 
-df
+
 
 
 # ### PCA & Vizualization
