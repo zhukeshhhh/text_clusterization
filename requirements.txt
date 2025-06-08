@@ -1,0 +1,14 @@
+torch-directml
+torch
+pandas
+numpy
+matplotlib
+seaborn
+gensim
+nltk
+numpy==1.26.4
+sentence-transformers==4.1.0
+transformers[torch]
+memory_profiler
+spacy
+loguru
