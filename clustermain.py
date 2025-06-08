@@ -9,7 +9,7 @@ from sentence_transformers import SentenceTransformer
 
 from transformers import BertTokenizer, BertModel, BertConfig
 import time
-import torch_directml
+
 
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -88,13 +88,22 @@ df = pd.concat([df1, df2, df3, df4, df5, df6])
 # device = torch.device("mps")
 
 # Uncomment for amd on windoes
-device = torch_directml.device()
+try:
+    import torch_directml
+    device = torch_directml.device()
+except Exception as e:
+    logger.exception(e)
+
 if torch.cuda.is_available():
     device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
 logger.info(f"Using device: {device}")
 
 
 def preprocess_text(text: str) -> str:
+    # remove html tags
+    text = re.sub(r"<[^>]*>", " ", text)
     # remove links
     text = re.sub(r"http\S+", "", text)
     # remove special chars and numbers
@@ -201,11 +210,7 @@ def get_cls_sentence(sentence):
 
     # Pass input through BERT model and extract embeddings for [CLS] token
     with torch.no_grad():
-        outputs = pipeline.model(input_ids)
-        cls_embedding = outputs[0][:, 0, :]
-
-
-    return cls_embedding.flatten()
+        return pipeline.model(input_ids)[0][:, 0, :].flatten()
 
 
 
